@@ -1,17 +1,16 @@
-# OpenShift Disconnected Mirroring Tool (With Auto-Installer)
+# OpenShift Disconnected Mirroring Tool (With Local Registry Auto-Installer)
 
-This repository contains a Python script to automate the mirroring process for a Red Hat OpenShift 4.x disconnected (offline) installation using the `oc-mirror` plugin. 
+This repository contains a Python script to automate the mirroring process for a Red Hat OpenShift 4.x disconnected (offline) installation. 
 
-## What's New
-* **Auto-Downloading of Prerequisites**: If the `oc` and `oc-mirror` CLI tools are not found in your system's `$PATH`, the script will automatically reach out to the Red Hat OpenShift mirrors, download the binaries for your specified version, extract them into a local `./bin` directory, and temporarily add them to the execution `$PATH`.
+## Key Features
+* **Auto-Downloading of Tools**: Fetches `oc` and `oc-mirror` automatically if they are missing from your `$PATH`.
+* **Automatic Registry Configuration**: If `oc-mirror` is not found (implying a fresh setup), the script will automatically download and install Red Hat's official `mirror-registry` (a lightweight Quay instance), as is standard for disconnected setups described in Red Hat blogs and documentation. 
 
-## Prerequisites Before Running
+## Prerequisites
 
-1. **Internet Access (If Auto-Downloading):** Your bastion host needs access to `mirror.openshift.com` if it needs to download the `oc` and `oc-mirror` tools.
-2. **Authentication:** Your `~/.docker/config.json` (or `${XDG_RUNTIME_DIR}/containers/auth.json` for Podman) must contain combined authentication for:
-   * `quay.io` and `registry.redhat.io` (your Red Hat pull secret).
-   * Your internal RHEL mirror registry.
-3. **Local Registry:** A container registry must be running and accessible on your target RHEL server.
+1. **Internet Access**: Your bastion host needs internet access to `mirror.openshift.com` if tools/registry need to be downloaded.
+2. **Sudo Privileges**: If the local mirror registry needs to be set up, the script requires `sudo` privileges to configure Podman, firewall rules, and systemd via the `mirror-registry` installer.
+3. **Authentication:** Your `~/.docker/config.json` (or `${XDG_RUNTIME_DIR}/containers/auth.json`) must contain your Red Hat pull secret from console.redhat.com.
 
 ## Usage
 
@@ -20,19 +19,22 @@ This repository contains a Python script to automate the mirroring process for a
    chmod +x mirror_ocp.py
    ```
 
-2. Run the script by passing your internal registry endpoint:
+2. Run the script by passing your intended internal registry endpoint. If using the auto-installed mirror registry, the default port is `8443`.
    ```bash
-   ./mirror_ocp.py --registry my-rhel-registry.internal.lan:5000
+   ./mirror_ocp.py --registry my-rhel-registry.internal.lan:8443
    ```
 
+### Default Credentials for Auto-Installed Registry
+If the script automatically installs the `mirror-registry`, it will initialize it with:
+* **Username**: `admin`
+* **Password**: `RedHat123!`
+
+**Important:** Before the mirroring begins, make sure you add these credentials to your podman/docker authentication file:
+```bash
+podman login my-rhel-registry.internal.lan:8443 -u admin -p RedHat123!
+```
+
 ### Optional Arguments
-* `--version`: Target OpenShift version. Also used to dynamically fetch the correct `oc` and `oc-mirror` tool versions if they are missing (default: `4.21`).
+* `--version`: Target OpenShift version (default: `4.21`).
 * `--channel`: Override the release channel (default: `stable-4.21`).
 * `--config-file`: Specify a custom name for the generated configuration file (default: `imageset-config.yaml`).
-
-## Next Steps Post-Mirroring
-After a successful run, apply the generated configurations to your OpenShift cluster:
-```bash
-oc apply -f ./oc-mirror-workspace/results-*/release-signatures/
-oc apply -f ./oc-mirror-workspace/results-*/imageContentSourcePolicy.yaml
-```

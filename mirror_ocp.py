@@ -41,7 +41,6 @@ def download_and_extract(url, dest_dir):
         urllib.request.urlretrieve(url, file_path)
     except urllib.error.URLError as e:
         print(f"[ERROR] Failed to download from {url}: {e}")
-        print("[ERROR] Ensure you have internet access or pre-install the tools manually.")
         raise
 
     print(f"[INFO] Extracting {file_name} ...")
@@ -51,7 +50,7 @@ def download_and_extract(url, dest_dir):
 
 
 def ensure_tools(version):
-    """Checks for oc and oc-mirror in PATH. If missing, downloads and installs them locally."""
+    """Checks for oc and oc-mirror. If missing, downloads them and returns True (meaning missing)."""
     tools = ['oc', 'oc-mirror']
     tools_missing = False
 
@@ -62,54 +61,70 @@ def ensure_tools(version):
 
     if not tools_missing:
         print("[INFO] All prerequisite tools ('oc', 'oc-mirror') found in PATH.")
-        return
+        return False
 
-    print("[WARNING] Prerequisites not found in PATH. Attempting to download them locally...")
+    print("[WARNING] Prerequisites not found in PATH. Downloading them locally...")
     bin_dir = os.path.join(os.getcwd(), "bin")
     os.makedirs(bin_dir, exist_ok=True)
 
-    # Check if they exist in our local ./bin directory first
-    if os.path.exists(os.path.join(bin_dir, "oc")) and os.path.exists(os.path.join(bin_dir, "oc-mirror")):
-        print(f"[INFO] Tools found in local bin directory: {bin_dir}")
-    else:
-        base_url = f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest-{version}"
+    base_url = f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest-{version}"
 
-        try:
-            # Download OpenShift Client (oc)
-            oc_url = f"{base_url}/openshift-client-linux.tar.gz"
-            download_and_extract(oc_url, bin_dir)
+    try:
+        if not os.path.exists(os.path.join(bin_dir, "oc")):
+            download_and_extract(f"{base_url}/openshift-client-linux.tar.gz", bin_dir)
 
-            # Download oc-mirror plugin
-            # Naming convention sometimes fluctuates between oc-mirror.tar.gz and oc-mirror-linux.tar.gz
-            oc_mirror_url = f"{base_url}/oc-mirror.tar.gz"
+        if not os.path.exists(os.path.join(bin_dir, "oc-mirror")):
             try:
-                download_and_extract(oc_mirror_url, bin_dir)
+                download_and_extract(f"{base_url}/oc-mirror.tar.gz", bin_dir)
             except urllib.error.URLError:
-                print("[INFO] 'oc-mirror.tar.gz' not found, falling back to 'oc-mirror-linux.tar.gz'...")
-                oc_mirror_url = f"{base_url}/oc-mirror-linux.tar.gz"
-                download_and_extract(oc_mirror_url, bin_dir)
+                download_and_extract(f"{base_url}/oc-mirror-linux.tar.gz", bin_dir)
 
-        except Exception as e:
-            print(f"[ERROR] Could not automatically download tools. Please install them manually. Details: {e}")
-            sys.exit(1)
+    except Exception as e:
+        print(f"[ERROR] Could not automatically download tools. Details: {e}")
+        sys.exit(1)
 
-        # Ensure executable permissions
-        for tool in tools:
-            tool_path = os.path.join(bin_dir, tool)
-            if os.path.exists(tool_path):
-                os.chmod(tool_path, 0o755)
+    for tool in tools:
+        tool_path = os.path.join(bin_dir, tool)
+        if os.path.exists(tool_path):
+            os.chmod(tool_path, 0o755)
 
-    # Prepend local bin directory to the script's PATH
     os.environ["PATH"] = f"{bin_dir}:{os.environ.get('PATH', '')}"
     print(f"[INFO] Added {bin_dir} to PATH for this session.")
+    return True
 
-    # Final verification
-    for tool in tools:
-        if subprocess.run(['which', tool], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-            print(f"[ERROR] Tool '{tool}' could not be installed/found even after download attempt.")
-            sys.exit(1)
 
-    print("[INFO] All prerequisite tools successfully verified.")
+def setup_local_mirror_registry(registry_fqdn):
+    """Installs Red Hat's official mirror-registry tool if oc-mirror was missing."""
+    print("\n=========================================================")
+    print("[INFO] Setting up Local Mirror Registry (Quay)...")
+    print("=========================================================")
+
+    bin_dir = os.path.join(os.getcwd(), "bin")
+    mirror_registry_url = "https://mirror.openshift.com/pub/openshift-v4/clients/mirror-registry/latest/mirror-registry.tar.gz"
+
+    if not os.path.exists(os.path.join(bin_dir, "mirror-registry")):
+        try:
+            download_and_extract(mirror_registry_url, bin_dir)
+        except Exception as e:
+            print(f"[ERROR] Failed to download mirror-registry tool: {e}")
+            return
+
+    # Extract hostname from registry string (e.g., registry.internal.com:5000 -> registry.internal.com)
+    hostname = registry_fqdn.split(':')[0]
+
+    install_cmd = [
+        "sudo", os.path.join(bin_dir, "mirror-registry"),
+        "install",
+        "--quayHostname", hostname,
+        "--initUser", "admin",
+        "--initPassword", "RedHat123!"
+    ]
+
+    print("[INFO] Running mirror-registry installer. (Note: this requires sudo privileges)")
+    run_command(install_cmd,
+                "Failed to install the local mirror registry. Ensure you have sudo access and podman is installable.")
+    print("[SUCCESS] Local Mirror Registry (Quay) is successfully configured!")
+    print(f"[INFO] You can log in via: podman login {hostname}:8443 -u admin -p RedHat123!")
 
 
 def generate_imageset_config(version, channel, config_path):
@@ -138,16 +153,15 @@ def generate_imageset_config(version, channel, config_path):
     try:
         with open(config_path, 'w') as f:
             f.write(config_content)
-        print(f"[INFO] Generated ImageSetConfiguration at {config_path}")
+        print(f"\n[INFO] Generated ImageSetConfiguration at {config_path}")
     except IOError as e:
         print(f"[ERROR] Failed to write config file: {e}")
         sys.exit(1)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Automate OCP Mirroring to a target RHEL registry with auto-downloader.")
-    parser.add_argument("--registry", required=True, help="Target mirror registry (e.g., registry.internal.com:5000)")
+    parser = argparse.ArgumentParser(description="Automate OCP Mirroring & Local Registry Setup.")
+    parser.add_argument("--registry", required=True, help="Target mirror registry (e.g., registry.internal.com:8443)")
     parser.add_argument("--version", default="4.21", help="OpenShift major.minor version (default: 4.21)")
     parser.add_argument("--channel", default="stable-4.21", help="OpenShift release channel (default: stable-4.21)")
     parser.add_argument("--config-file", default="imageset-config.yaml", help="Path to generate the config file")
@@ -155,39 +169,46 @@ def main():
     args = parser.parse_args()
 
     print("=========================================================")
-    print("      OpenShift Disconnected Mirroring Script            ")
+    print("      OpenShift Disconnected Mirroring Automation        ")
     print("=========================================================")
     print(f"Target Registry: {args.registry}")
     print(f"OCP Version:     {args.version}")
-    print(f"Channel:         {args.channel}")
     print("=========================================================\n")
 
-    # 1. Download/Verify Tools
-    ensure_tools(args.version)
+    # 1. Download/Verify Tools (oc, oc-mirror)
+    tools_were_missing = ensure_tools(args.version)
 
-    # 2. Check Auth
+    # 2. Configure Local Mirror Registry if tools were missing
+    if tools_were_missing:
+        print("[INFO] 'oc-mirror' was missing. Assuming fresh setup. Configuring local mirror registry...")
+        setup_local_mirror_registry(args.registry)
+        # Note: If the registry just started, ensure it's in the docker auth JSON.
+        # Typically mirror-registry tool outputs login instructions.
+        print(
+            "\n[ACTION REQUIRED] Ensure your ~/.docker/config.json or ${XDG_RUNTIME_DIR}/containers/auth.json contains credentials for the newly created registry.")
+
+    # 3. Check Auth File
     auth_file = os.environ.get('REGISTRY_AUTH_FILE', os.path.expanduser('~/.docker/config.json'))
     if not os.path.exists(auth_file):
-        print(
-            f"[WARNING] Auth file not found at {auth_file}. Ensure you are authenticated to Quay and your local registry.")
+        print(f"\n[WARNING] Auth file not found at {auth_file}. Ensure you are authenticated.")
     else:
-        print(f"[INFO] Using container auth file: {auth_file}")
+        print(f"\n[INFO] Using container auth file: {auth_file}")
 
-    # 3. Build Config
+    # 4. Build Config
     generate_imageset_config(args.version, args.channel, args.config_file)
 
-    # 4. Execute Mirror
+    # 5. Execute Mirror
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
         f"docker://{args.registry}"
     ]
 
-    run_command(mirror_cmd,
-                "oc-mirror process failed. Check your network connectivity, registry authentication, and storage space.")
+    print("\n[INFO] Starting mirror synchronization...")
+    run_command(mirror_cmd, "oc-mirror process failed. Verify your registry authentication and storage capacity.")
 
     print("\n=========================================================")
-    print("[SUCCESS] Mirroring completed successfully!")
+    print("[SUCCESS] Process completed successfully!")
     print("=========================================================")
 
 
