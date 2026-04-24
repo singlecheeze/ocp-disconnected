@@ -5,6 +5,9 @@ import sys
 import os
 import argparse
 import textwrap
+import urllib.request
+import tarfile
+import urllib.error
 
 
 def run_command(command, error_message):
@@ -29,20 +32,88 @@ def run_command(command, error_message):
         sys.exit(1)
 
 
-def check_prerequisites():
-    """Checks if required CLI tools are installed."""
+def download_and_extract(url, dest_dir):
+    """Downloads a tar.gz file and extracts it to the destination directory."""
+    file_name = url.split('/')[-1]
+    file_path = os.path.join(dest_dir, file_name)
+    print(f"[INFO] Downloading {url} ...")
+    try:
+        urllib.request.urlretrieve(url, file_path)
+    except urllib.error.URLError as e:
+        print(f"[ERROR] Failed to download from {url}: {e}")
+        print("[ERROR] Ensure you have internet access or pre-install the tools manually.")
+        raise
+
+    print(f"[INFO] Extracting {file_name} ...")
+    with tarfile.open(file_path, "r:gz") as tar:
+        tar.extractall(path=dest_dir)
+    os.remove(file_path)
+
+
+def ensure_tools(version):
+    """Checks for oc and oc-mirror in PATH. If missing, downloads and installs them locally."""
     tools = ['oc', 'oc-mirror']
+    tools_missing = False
+
     for tool in tools:
         if subprocess.run(['which', tool], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-            print(f"[ERROR] Required tool '{tool}' is not installed or not in PATH.")
+            tools_missing = True
+            break
+
+    if not tools_missing:
+        print("[INFO] All prerequisite tools ('oc', 'oc-mirror') found in PATH.")
+        return
+
+    print("[WARNING] Prerequisites not found in PATH. Attempting to download them locally...")
+    bin_dir = os.path.join(os.getcwd(), "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+
+    # Check if they exist in our local ./bin directory first
+    if os.path.exists(os.path.join(bin_dir, "oc")) and os.path.exists(os.path.join(bin_dir, "oc-mirror")):
+        print(f"[INFO] Tools found in local bin directory: {bin_dir}")
+    else:
+        base_url = f"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest-{version}"
+
+        try:
+            # Download OpenShift Client (oc)
+            oc_url = f"{base_url}/openshift-client-linux.tar.gz"
+            download_and_extract(oc_url, bin_dir)
+
+            # Download oc-mirror plugin
+            # Naming convention sometimes fluctuates between oc-mirror.tar.gz and oc-mirror-linux.tar.gz
+            oc_mirror_url = f"{base_url}/oc-mirror.tar.gz"
+            try:
+                download_and_extract(oc_mirror_url, bin_dir)
+            except urllib.error.URLError:
+                print("[INFO] 'oc-mirror.tar.gz' not found, falling back to 'oc-mirror-linux.tar.gz'...")
+                oc_mirror_url = f"{base_url}/oc-mirror-linux.tar.gz"
+                download_and_extract(oc_mirror_url, bin_dir)
+
+        except Exception as e:
+            print(f"[ERROR] Could not automatically download tools. Please install them manually. Details: {e}")
             sys.exit(1)
-    print("[INFO] All prerequisite tools found.")
+
+        # Ensure executable permissions
+        for tool in tools:
+            tool_path = os.path.join(bin_dir, tool)
+            if os.path.exists(tool_path):
+                os.chmod(tool_path, 0o755)
+
+    # Prepend local bin directory to the script's PATH
+    os.environ["PATH"] = f"{bin_dir}:{os.environ.get('PATH', '')}"
+    print(f"[INFO] Added {bin_dir} to PATH for this session.")
+
+    # Final verification
+    for tool in tools:
+        if subprocess.run(['which', tool], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+            print(f"[ERROR] Tool '{tool}' could not be installed/found even after download attempt.")
+            sys.exit(1)
+
+    print("[INFO] All prerequisite tools successfully verified.")
 
 
 def generate_imageset_config(version, channel, config_path):
     """Generates the ImageSetConfiguration YAML file."""
-    # This configuration mirrors the platform release and a few essential operators.
-    # Modify the packages list based on your specific workload requirements.
     config_content = textwrap.dedent(f"""\
         kind: ImageSetConfiguration
         apiVersion: mirror.openshift.io/v1alpha2
@@ -74,7 +145,8 @@ def generate_imageset_config(version, channel, config_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Automate OCP 4.21 Mirroring to a target RHEL registry.")
+    parser = argparse.ArgumentParser(
+        description="Automate OCP Mirroring to a target RHEL registry with auto-downloader.")
     parser.add_argument("--registry", required=True, help="Target mirror registry (e.g., registry.internal.com:5000)")
     parser.add_argument("--version", default="4.21", help="OpenShift major.minor version (default: 4.21)")
     parser.add_argument("--channel", default="stable-4.21", help="OpenShift release channel (default: stable-4.21)")
@@ -90,10 +162,10 @@ def main():
     print(f"Channel:         {args.channel}")
     print("=========================================================\n")
 
-    # 1. Verify environment
-    check_prerequisites()
+    # 1. Download/Verify Tools
+    ensure_tools(args.version)
 
-    # 2. Ensure auth file is accessible (oc-mirror relies on Docker/Podman auth)
+    # 2. Check Auth
     auth_file = os.environ.get('REGISTRY_AUTH_FILE', os.path.expanduser('~/.docker/config.json'))
     if not os.path.exists(auth_file):
         print(
@@ -101,12 +173,10 @@ def main():
     else:
         print(f"[INFO] Using container auth file: {auth_file}")
 
-    # 3. Create the ImageSetConfiguration
+    # 3. Build Config
     generate_imageset_config(args.version, args.channel, args.config_file)
 
-    # 4. Execute the oc-mirror command
-    # NOTE: To do a fully air-gapped file transfer instead of direct-to-registry,
-    # replace 'docker://...' with 'file://./mirror-archive'
+    # 4. Execute Mirror
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
@@ -119,11 +189,6 @@ def main():
     print("\n=========================================================")
     print("[SUCCESS] Mirroring completed successfully!")
     print("=========================================================")
-    print("Next Steps:")
-    print("1. Apply the generated ImageContentSourcePolicy (ICSP) or ImageDigestMirrorSet (IDMS) to your cluster.")
-    print("2. The output manifests are located in the ./oc-mirror-workspace/results-*/ directory.")
-    print("   Apply them using: oc apply -f ./oc-mirror-workspace/results-*/release-signatures/")
-    print("                     oc apply -f ./oc-mirror-workspace/results-*/imageContentSourcePolicy.yaml")
 
 
 if __name__ == "__main__":
