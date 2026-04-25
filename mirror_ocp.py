@@ -22,8 +22,7 @@ def run_command(command, error_message):
             text=True
         )
         for line in process.stdout:
-            # Replaced carriage returns to prevent output overwriting in the console
-            print(line.replace('\r', ''), end='')
+            print(line, end='')
         process.wait()
         
         if process.returncode != 0:
@@ -250,21 +249,18 @@ def generate_imageset_config(version, channel, config_path):
     """Generates the ImageSetConfiguration YAML file."""
     config_content = textwrap.dedent(f"""\
         kind: ImageSetConfiguration
-        apiVersion: mirror.openshift.io/v1alpha2
-        storageConfig:
-          local:
-            path: ./oc-mirror-workspace
+        apiVersion: mirror.openshift.io/v2alpha1
         mirror:
           platform:
             channels:
             - name: {channel}
-              type: ocp
+            graph: true
           operators:
           - catalog: registry.redhat.io/redhat/redhat-operator-index:v{version}
             packages:
-            - name: local-storage-operator
-            - name: openshift-gitops-operator
-            - name: advanced-cluster-management
+            - name: kubevirt-hyperconverged
+            - name: odf-operator
+            - name: nfd
           additionalImages:
           - name: registry.redhat.io/ubi8/ubi:latest
     """)
@@ -317,17 +313,22 @@ def main():
     # 4. Build Config
     generate_imageset_config(args.version, args.channel, args.config_file)
 
-    # Determine current directory for workspace
+    # Determine current directory for workspace and cache
     current_dir = os.path.abspath(os.getcwd())
-    workspace_path = os.path.join(current_dir, "oc-mirror-workspace")
-    # Make sure the target directory exists before running
+    workspace_path = os.path.join(current_dir, "workspace")
+    cache_path = os.path.join(current_dir, "cache")
+    
+    # Make sure the target directories exist before running
     os.makedirs(workspace_path, exist_ok=True)
+    os.makedirs(cache_path, exist_ok=True)
     
     # 5. Execute Mirror
+    # The workspace and cache-dir arguments must precede the docker argument
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
-        "--workspace", f"file://{workspace_path}",
+        "--workspace", workspace_path,
+        "--cache-dir", cache_path,
         f"docker://{args.registry}"
     ]
     
