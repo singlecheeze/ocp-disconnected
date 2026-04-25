@@ -3,11 +3,12 @@
 This repository contains a Python script to automate the mirroring process for a Red Hat OpenShift 4.x disconnected (offline) installation. 
 
 ## Key Features
+* **Dynamic Target Registry**: Automatically detects the fully qualified domain name (FQDN) of the system it is running on to set up and target the mirror registry seamlessly.
 * **Pull Secret Formatting & Base64 Auth Injection**: Automatically maps your pull secret to your Podman directory. It then generates a base64 string of the local mirror registry credentials and dynamically injects them into the `auths` block of the `auth.json` file.
 * **Explicit Auth Targeting**: Uses the `--authfile` argument to ensure `oc-mirror` accurately utilizes the generated podman credentials file instead of relying on environment variables.
 * **Auto-Install Podman**: Automatically checks for and installs Podman via `dnf` if it is not present on the system.
 * **Auto-Downloading of Tools**: Fetches `oc` and `oc-mirror` automatically if they are missing from your `$PATH`.
-* **Automatic Registry Configuration**: If `oc-mirror` is not found, the script downloads and installs Red Hat's official `mirror-registry` (a lightweight Quay instance).
+* **Automatic Registry Configuration**: If `oc-mirror` is not found, the script downloads and installs Red Hat's official `mirror-registry` (a lightweight Quay instance) with SSL checks bypassed for simplified local setup.
 * **Firewall Configuration**: Automatically configures `firewalld` to allow inbound traffic on the designated registry port.
 * **v2 Engine**: Defaults to using the `--v2` flag when executing `oc-mirror` and conforms to the `v2alpha1` API format.
 * **Local Workspace & Caching**: Explicitly defines the mirror workspace (`workspace`) and cache (`cache`) directories using absolute `file://` URIs within the current working path.
@@ -25,12 +26,13 @@ This repository contains a Python script to automate the mirroring process for a
    chmod +x mirror_ocp.py
    ```
 
-2. Run the script by passing your intended internal registry endpoint. Place your `pull-secret.txt` file in the same directory.
+2. Run the script. By default, it will detect your system's hostname and use port 8443 for the registry. Place your `pull-secret.txt` file in the same directory.
    ```bash
-   ./mirror_ocp.py --registry my-registry.localdomain:8443
+   ./mirror_ocp.py
    ```
 
 ### Optional Arguments
+* `--registry`: Override the target mirror registry (default: `<system-fqdn>:8443`).
 * `--pull-secret`: Specify a custom path to your pull secret (default: `./pull-secret.txt`).
 * `--version`: Target OpenShift version (default: `4.21`).
 * `--channel`: Override the release channel (default: `stable-4.21`).

@@ -10,6 +10,7 @@ import tarfile
 import urllib.error
 import json
 import base64
+import socket
 
 def run_command(command, error_message):
     """Executes a shell command and streams the output."""
@@ -231,7 +232,8 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
         "install",
         "--quayHostname", hostname,
         "--initUser", admin_user,
-        "--initPassword", admin_pass
+        "--initPassword", admin_pass,
+        "--sslCheckSkip"
     ]
     
     print("[INFO] Running mirror-registry installer. (Note: this requires sudo privileges)")
@@ -272,8 +274,10 @@ def generate_imageset_config(version, channel, config_path):
         sys.exit(1)
 
 def main():
+    default_registry = f"{socket.getfqdn()}:8443"
+    
     parser = argparse.ArgumentParser(description="Automate OCP Mirroring & Local Registry Setup.")
-    parser.add_argument("--registry", required=True, help="Target mirror registry (e.g., my-registry.localdomain:8443)")
+    parser.add_argument("--registry", default=default_registry, help=f"Target mirror registry (default: {default_registry})")
     parser.add_argument("--version", default="4.21", help="OpenShift major.minor version (default: 4.21)")
     parser.add_argument("--channel", default="stable-4.21", help="OpenShift release channel (default: stable-4.21)")
     parser.add_argument("--config-file", default="imageset-config.yaml", help="Path to generate the config file")
