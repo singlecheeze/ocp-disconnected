@@ -139,8 +139,6 @@ def setup_auth_file(pull_secret_path):
         print(f"[WARNING] Pull secret file '{pull_secret_path}' not found.")
         print("[WARNING] Relying on existing Podman authentication (if any).")
         
-    # Export it for the current environment so oc-mirror knows exactly where to look
-    os.environ["REGISTRY_AUTH_FILE"] = auth_file
     return auth_file
 
 def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
@@ -305,7 +303,6 @@ def main():
         print("\n[INFO] 'oc-mirror' was missing. Assuming fresh setup. Configuring local mirror registry...")
         setup_local_mirror_registry(args.registry, auth_file_path)
         # We need to tell oc-mirror to not verify TLS if we just stood up a self-signed registry
-        os.environ["REGISTRY_AUTH_PREFERENCE"] = "podman"
         mirror_needs_tls_bypass = True
     else:
         mirror_needs_tls_bypass = False
@@ -324,12 +321,13 @@ def main():
     
     # 5. Execute Mirror
     # The workspace and cache-dir arguments must precede the docker argument
-    # Added 'file://' prefix to the workspace and cache paths
+    # Added 'file://' prefix to the workspace, cache, and auth paths
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
         "--workspace", f"file://{workspace_path}",
         "--cache-dir", f"file://{cache_path}",
+        "--authfile", f"file://{auth_file_path}",
         f"docker://{args.registry}"
     ]
     
