@@ -324,11 +324,12 @@ def main():
     
     # 5. Execute Mirror
     # The workspace and cache-dir arguments must precede the docker argument
+    # Added 'file://' prefix to the workspace and cache paths
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
-        "--workspace", workspace_path,
-        "--cache-dir", cache_path,
+        "--workspace", f"file://{workspace_path}",
+        "--cache-dir", f"file://{cache_path}",
         f"docker://{args.registry}"
     ]
     
