@@ -327,8 +327,8 @@ def main():
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
-        f"docker://{args.registry}",
-        "--workspace", f"file://{workspace_path}"
+        "--workspace", f"file://{workspace_path}",
+        f"docker://{args.registry}"
     ]
     
     if mirror_needs_tls_bypass:
