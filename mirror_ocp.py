@@ -310,25 +310,24 @@ def main():
         setup_local_mirror_registry(args.registry, auth_file_path)
         # We need to tell oc-mirror to not verify TLS if we just stood up a self-signed registry
         os.environ["REGISTRY_AUTH_PREFERENCE"] = "podman"
-        mirror_tls_flag = "--dest-skip-tls"
+        mirror_needs_tls_bypass = True
     else:
-        mirror_tls_flag = ""
+        mirror_needs_tls_bypass = False
 
     # 4. Build Config
     generate_imageset_config(args.version, args.channel, args.config_file)
 
     # 5. Execute Mirror
-    # Appending the tls flag if we just built the registry self-signed
-    # Also appended the --v2 flag requested
     mirror_cmd = [
         "oc-mirror",
-        "--v2",
         "--config", args.config_file,
         f"docker://{args.registry}"
     ]
     
-    if mirror_tls_flag:
-        mirror_cmd.insert(1, mirror_tls_flag)
+    if mirror_needs_tls_bypass:
+        mirror_cmd.extend(["--dest-tls-verify=false", "--src-tls-verify=false"])
+        
+    mirror_cmd.append("--v2")
     
     print("\n[INFO] Starting mirror synchronization...")
     run_command(mirror_cmd, "oc-mirror process failed. Verify your Red Hat pull secret and storage capacity.")
