@@ -22,7 +22,7 @@ def run_command(command, error_message):
             text=True
         )
         for line in process.stdout:
-            print(line, end='')
+            print(line.replace('\r', ''), end='')
         process.wait()
         
         if process.returncode != 0:
