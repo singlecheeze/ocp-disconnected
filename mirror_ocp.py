@@ -317,11 +317,18 @@ def main():
     # 4. Build Config
     generate_imageset_config(args.version, args.channel, args.config_file)
 
+    # Determine current directory for workspace
+    current_dir = os.path.abspath(os.getcwd())
+    workspace_path = os.path.join(current_dir, "oc-mirror-workspace")
+    # Make sure the target directory exists before running
+    os.makedirs(workspace_path, exist_ok=True)
+    
     # 5. Execute Mirror
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
-        f"docker://{args.registry}"
+        f"docker://{args.registry}",
+        "--workspace", f"file://{workspace_path}"
     ]
     
     if mirror_needs_tls_bypass:

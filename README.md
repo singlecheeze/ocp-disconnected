@@ -9,6 +9,7 @@ This repository contains a Python script to automate the mirroring process for a
 * **Automatic Registry Configuration**: If `oc-mirror` is not found, the script downloads and installs Red Hat's official `mirror-registry` (a lightweight Quay instance).
 * **Firewall Configuration**: Automatically configures `firewalld` to allow inbound traffic on the designated registry port.
 * **v2 Engine**: Defaults to using the `--v2` flag when executing `oc-mirror`.
+* **Local Workspace**: Explicitly defines the mirror workspace directory within the current working path.
 
 ## Prerequisites
 
