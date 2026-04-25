@@ -22,7 +22,7 @@ def run_command(command, error_message):
             text=True
         )
         for line in process.stdout:
-            print(line.replace('\r', ''), end='')
+            print(line.replace('\r', ''), end='') #TODO: add this to AI output
         process.wait()
         
         if process.returncode != 0:
@@ -167,6 +167,7 @@ def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
         # Usually found under cloud.openshift.com or registry.redhat.io
         email = ""
         for registry, data in auth_data['auths'].items():
+            #TODO: The email gets removed
             if 'email' in data:
                 email = data['email']
                 break
