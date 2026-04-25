@@ -328,6 +328,8 @@ def main():
         mirror_cmd.insert(1, mirror_tls_flag)
     
     print("\n[INFO] Starting mirror synchronization...")
+    #TODO: the use of the flag --v1 or --v2 is mandatory, please use --v2 for the supported oc-mirror version or --v1 to continue using the deprecated version
+
     run_command(mirror_cmd, "oc-mirror process failed. Verify your Red Hat pull secret and storage capacity.")
     
     print("\n=========================================================")
