@@ -3,7 +3,7 @@
 This repository contains a Python script to automate the mirroring process for a Red Hat OpenShift 4.x disconnected (offline) installation. 
 
 ## Key Features
-* **Pull Secret Formatting**: Automatically maps your pull secret to your Podman directory (handling the `mkdir -p` and `jq` formatting natively).
+* **Pull Secret Formatting & Base64 Auth Injection**: Automatically maps your pull secret to your Podman directory (handling the `mkdir -p` and `jq` formatting natively). It then generates a base64 string of the local mirror registry credentials and dynamically injects them into the `auths` block of the `auth.json` file.
 * **Auto-Install Podman**: Automatically checks for and installs Podman via `dnf` if it is not present on the system.
 * **Auto-Downloading of Tools**: Fetches `oc` and `oc-mirror` automatically if they are missing from your `$PATH`.
 * **Automatic Registry Configuration**: If `oc-mirror` is not found, the script downloads and installs Red Hat's official `mirror-registry` (a lightweight Quay instance).
