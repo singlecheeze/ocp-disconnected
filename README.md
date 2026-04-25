@@ -3,16 +3,17 @@
 This repository contains a Python script to automate the mirroring process for a Red Hat OpenShift 4.x disconnected (offline) installation. 
 
 ## Key Features
-* **Pull Secret Formatting & Base64 Auth Injection**: Automatically maps your pull secret to your Podman directory (handling the `mkdir -p` and `jq` formatting natively). It then generates a base64 string of the local mirror registry credentials and dynamically injects them into the `auths` block of the `auth.json` file.
+* **Pull Secret Formatting & Base64 Auth Injection**: Automatically maps your pull secret to your Podman directory. It then generates a base64 string of the local mirror registry credentials and dynamically injects them into the `auths` block of the `auth.json` file.
 * **Auto-Install Podman**: Automatically checks for and installs Podman via `dnf` if it is not present on the system.
 * **Auto-Downloading of Tools**: Fetches `oc` and `oc-mirror` automatically if they are missing from your `$PATH`.
 * **Automatic Registry Configuration**: If `oc-mirror` is not found, the script downloads and installs Red Hat's official `mirror-registry` (a lightweight Quay instance).
-* **Automatic Authentication**: Automatically runs `podman login` to authenticate against the newly created local mirror registry.
+* **Firewall Configuration**: Automatically configures `firewalld` to allow inbound traffic on the designated registry port.
+* **v2 Engine**: Defaults to using the `--v2` flag when executing `oc-mirror`.
 
 ## Prerequisites
 
 1. **Internet Access**: Your bastion host needs internet access to `mirror.openshift.com` if tools need to be downloaded, and standard RHEL repo access if Podman needs to be installed via `dnf`.
-2. **Sudo Privileges**: Required to install Podman (if missing) and configure the local mirror registry (which configures systemd and firewall rules).
+2. **Sudo Privileges**: Required to install Podman, configure the local mirror registry, and manage system firewalls (`firewalld`).
 3. **Red Hat Pull Secret:** You must have your Red Hat pull secret (from console.redhat.com) stored locally. By default, the script looks for it at `./pull-secret.txt`.
 
 ## Usage

@@ -22,7 +22,8 @@ def run_command(command, error_message):
             text=True
         )
         for line in process.stdout:
-            print(line.replace('\r', ''), end='') #TODO: add this to AI output
+            # Replaced carriage returns to prevent output overwriting in the console
+            print(line.replace('\r', ''), end='')
         process.wait()
         
         if process.returncode != 0:
@@ -45,11 +46,9 @@ def download_and_extract(url, dest_dir):
         
     print(f"[INFO] Extracting {file_name} ...")
     with tarfile.open(file_path, "r:gz") as tar:
-        # Added filter='fully_trusted' as requested (Python 3.12+ security feature)
         try:
             tar.extractall(path=dest_dir, filter='fully_trusted')
         except TypeError:
-            # Fallback for Python versions older than 3.12 that don't support the filter parameter
             print("[WARNING] Python version does not support the 'filter' parameter in tarfile. Falling back to standard extraction.")
             tar.extractall(path=dest_dir)
     os.remove(file_path)
@@ -90,12 +89,10 @@ def ensure_tools(version):
             download_and_extract(f"{base_url}/openshift-client-linux.tar.gz", bin_dir)
         
         if not os.path.exists(os.path.join(bin_dir, "oc-mirror")):
-            # Updated to specific RHEL 9 tar.gz download
             oc_mirror_url = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/latest/oc-mirror.rhel9.tar.gz"
             try:
                 download_and_extract(oc_mirror_url, bin_dir)
             except urllib.error.URLError:
-                # Fallback just in case
                 print("[WARNING] Target oc-mirror URL failed, attempting standard URL...")
                 download_and_extract(f"{base_url}/oc-mirror.tar.gz", bin_dir)
                 
@@ -129,7 +126,7 @@ def setup_auth_file(pull_secret_path):
         
     if os.path.exists(pull_secret_path):
         print(f"[INFO] Found pull secret at '{pull_secret_path}'.")
-        print(f"[INFO] Formatting and saving to {auth_file} (Equivalent to: cat {pull_secret_path} | jq . > {auth_file})...")
+        print(f"[INFO] Formatting and saving to {auth_file}...")
         try:
             with open(pull_secret_path, 'r') as f:
                 secret_data = json.load(f)
@@ -159,15 +156,11 @@ def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
         with open(auth_file, 'r') as f:
             auth_data = json.load(f)
             
-        # Ensure 'auths' key exists
         if 'auths' not in auth_data:
             auth_data['auths'] = {}
             
-        # Try to extract the primary email from the existing pull secret
-        # Usually found under cloud.openshift.com or registry.redhat.io
         email = ""
         for registry, data in auth_data['auths'].items():
-            #TODO: The email gets removed
             if 'email' in data:
                 email = data['email']
                 break
@@ -175,11 +168,9 @@ def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
         if not email:
             email = "admin@localdomain"
             
-        # Base64 encode the credentials
         credentials = f"{admin_user}:{admin_pass}"
         encoded_creds = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
         
-        # Inject the new registry auth block
         auth_data['auths'][registry_url] = {
             "auth": encoded_creds,
             "email": email
@@ -193,6 +184,23 @@ def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
     except Exception as e:
         print(f"[ERROR] Failed to append credentials to auth file: {e}")
         sys.exit(1)
+
+def configure_firewall(port):
+    """Configures firewalld to allow traffic on the specified port."""
+    print(f"\n[INFO] Configuring firewall to allow port {port}/tcp...")
+    
+    # Check if firewalld is running
+    status_cmd = subprocess.run(['sudo', 'firewall-cmd', '--state'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if status_cmd.returncode != 0:
+         print("[WARNING] firewalld is not running or not installed. Skipping firewall configuration.")
+         return
+
+    add_port_cmd = ["sudo", "firewall-cmd", f"--add-port={port}/tcp", "--permanent"]
+    run_command(add_port_cmd, f"Failed to add port {port}/tcp to the firewall.")
+    
+    reload_cmd = ["sudo", "firewall-cmd", "--reload"]
+    run_command(reload_cmd, "Failed to reload the firewall.")
+    print(f"[SUCCESS] Firewall configured to allow port {port}/tcp.")
 
 def setup_local_mirror_registry(registry_fqdn, auth_file):
     """Installs Red Hat's official mirror-registry tool and authenticates podman."""
@@ -215,6 +223,9 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
     port = registry_fqdn.split(':')[1] if ':' in registry_fqdn else '8443'
     registry_url = f"{hostname}:{port}"
     
+    # Configure the firewall for the extracted port before starting the registry
+    configure_firewall(port)
+    
     admin_user = "admin"
     admin_pass = "RedHat123!"
 
@@ -233,17 +244,7 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
     # Explicitly append auth using base64 injection into auth.json
     append_registry_auth(auth_file, registry_url, admin_user, admin_pass)
     
-    # We still run podman login as a sanity check and to ensure podman's internal state is fully aware,
-    # but the primary auth configuration has already been written directly to the file above.
-    print(f"\n[INFO] Authenticating podman to {registry_url} (Verification step)...")
-    login_cmd = [
-        "podman", "login", registry_url,
-        "-u", admin_user,
-        "-p", admin_pass,
-        "--tls-verify=false" # Needed for self-signed certs generated by mirror-registry
-    ]
-    run_command(login_cmd, f"Failed to authenticate Podman against {registry_url}")
-    print("[SUCCESS] Successfully verified login to local mirror registry.")
+    print(f"\n[INFO] Registry credentials injected. Skipping 'podman login' execution to preserve required email keys.")
 
 def generate_imageset_config(version, channel, config_path):
     """Generates the ImageSetConfiguration YAML file."""
@@ -317,9 +318,11 @@ def main():
     generate_imageset_config(args.version, args.channel, args.config_file)
 
     # 5. Execute Mirror
-    # We append the tls flag if we just built the registry self-signed
+    # Appending the tls flag if we just built the registry self-signed
+    # Also appended the --v2 flag requested
     mirror_cmd = [
         "oc-mirror",
+        "--v2",
         "--config", args.config_file,
         f"docker://{args.registry}"
     ]
@@ -328,8 +331,6 @@ def main():
         mirror_cmd.insert(1, mirror_tls_flag)
     
     print("\n[INFO] Starting mirror synchronization...")
-    #TODO: the use of the flag --v1 or --v2 is mandatory, please use --v2 for the supported oc-mirror version or --v1 to continue using the deprecated version
-
     run_command(mirror_cmd, "oc-mirror process failed. Verify your Red Hat pull secret and storage capacity.")
     
     print("\n=========================================================")
