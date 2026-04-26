@@ -44,12 +44,11 @@ def run_command(command, error_message):
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
+            text=True
         )
         
         for line in process.stdout:
-            print(line, end='', flush=True)
+            print(line, end='')
                 
         process.wait()
         
