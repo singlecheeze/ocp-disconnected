@@ -246,7 +246,7 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
     configure_firewall(port)
     
     admin_user = "admin"
-    admin_pass = "RedHat123!"
+    admin_pass = "Welcome1"
 
     install_cmd = [
         "sudo", os.path.join(bin_dir, "mirror-registry"),
