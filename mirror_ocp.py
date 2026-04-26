@@ -253,8 +253,7 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
         "install",
         "--quayHostname", hostname,
         "--initUser", admin_user,
-        "--initPassword", admin_pass,
-        "--sslCheckSkip"
+        "--initPassword", admin_pass
     ]
     
     print("[INFO] Running mirror-registry installer. (Note: this requires sudo privileges)")
