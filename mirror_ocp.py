@@ -45,7 +45,6 @@ def run_command(command, error_message):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            shell=True,
             bufsize=1
         )
         
@@ -273,6 +272,7 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
     install_cmd = [
         "sudo", os.path.join(bin_dir, "mirror-registry"),
         "install",
+        "-v",
         "--quayHostname", hostname,
         "--initUser", admin_user,
         "--initPassword", admin_pass,
@@ -377,7 +377,6 @@ def main():
         "--config", args.config_file,
         "--workspace", f"file://{workspace_path}",
         "--parallel-images=10",
-        "--parallel-layers=10",
         f"docker://{args.registry}",
         "--v2"
     ]

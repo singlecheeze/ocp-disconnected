@@ -12,15 +12,21 @@ This repository contains a Python script to automate the mirroring process for a
 * **Trust Store Configuration**: After registry installation, the tool automatically imports the new Quay root CA certificate (`rootCA.pem`) into the system's trust anchors (`/etc/pki/ca-trust/source/anchors/`) and updates the system's CA trust list to securely route without ignoring TLS.
 * **Firewall Configuration**: Automatically configures `firewalld` to allow inbound traffic on the designated registry port.
 * **v2 Engine**: Defaults to using the `--v2` flag when executing `oc-mirror` and conforms to the `v2alpha1` API format.
-* **Optimized Syncing**: Implements `--parallel-images=10` and `--parallel-layers=10` for faster download and extraction concurrency.
+* **Optimized Syncing**: Implements `--parallel-images=10` for faster download and extraction concurrency.
 * **Real-time Terminal Output**: The script is optimized with `ANSIBLE_FORCE_COLOR=1` and an unbuffered `PYTHONUNBUFFERED=1` character-by-character stdout stream for rich, responsive real-time feedback during underlying playbook or command execution.
 * **Local Workspace**: Explicitly defines the mirror workspace directory using absolute `file://` URIs within the current working path.
 
-## Prerequisites
-
-1. **Internet Access**: Your bastion host needs internet access to `mirror.openshift.com` if tools need to be downloaded, and standard RHEL repo access if Podman needs to be installed via `dnf`.
-2. **Sudo Privileges**: Required to install Podman, configure the local mirror registry, and manage system firewalls (`firewalld`). The script will prompt you for this password upon execution.
-3. **Red Hat Pull Secret:** You must have your Red Hat pull secret stored locally. **You can download it from the bottom of the console found at this link: [https://console.redhat.com/openshift/downloads](https://console.redhat.com/openshift/downloads).** By default, the script looks for it at `./pull-secret.txt`.
+## System Requirements & Prerequisites
+1. **Operating System**: Tested on a **RHEL 9 VM**.
+2. **Compute Requirements**: 
+   * **CPU**: At least 4 vCPUs (8 vCPUs preferred).
+   * **Memory**: 8 GB of RAM minimum.
+   * **Storage**: For OpenShift 4.21, at least **500 GB of storage** (preferably thin-provisioned) is required if you plan on mirroring the *entire* OperatorHub. This footprint can be slimmed down considerably if you filter your template and mirror only specific operators.
+3. **Performance Expectations**: 
+   * Mirroring OpenShift 4.21 along with a few select operators (such as `kubevirt-hyperconverged` and `odf-operator`) took approximately **25 minutes**, downloading at an average rate of **21 MBps** using `--parallel-images=10`.
+4. **Internet Access**: Your bastion host needs internet access to `mirror.openshift.com` if tools need to be downloaded, and standard RHEL repo access if Podman needs to be installed via `dnf`.
+5. **Sudo Privileges**: Required to install Podman, configure the local mirror registry, and manage system firewalls (`firewalld`). The script will prompt you for this password upon execution.
+6. **Red Hat Pull Secret:** You must have your Red Hat pull secret stored locally. **You can download it from the bottom of the console found at this link: [https://console.redhat.com/openshift/downloads](https://console.redhat.com/openshift/downloads).** By default, the script looks for it at `./pull-secret.txt`.
 
 ## Usage
 
