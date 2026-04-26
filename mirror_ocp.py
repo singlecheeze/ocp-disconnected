@@ -45,6 +45,7 @@ def run_command(command, error_message):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            shell=True,
             bufsize=1
         )
         
