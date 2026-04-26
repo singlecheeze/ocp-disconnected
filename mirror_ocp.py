@@ -350,10 +350,6 @@ def main():
     if tools_were_missing:
         print("\n[INFO] 'oc-mirror' was missing. Assuming fresh setup. Configuring local mirror registry...")
         setup_local_mirror_registry(args.registry, auth_file_path)
-        # We need to tell oc-mirror to not verify TLS if we just stood up a self-signed registry
-        mirror_needs_tls_bypass = True
-    else:
-        mirror_needs_tls_bypass = False
 
     # 4. Build Config from External Template
     generate_imageset_config(args.version, args.channel, args.template_file, args.config_file)
@@ -366,20 +362,16 @@ def main():
     os.makedirs(workspace_path, exist_ok=True)
     
     # 5. Execute Mirror
+    # Removed --authfile, --dest-tls-verify=false, and --src-tls-verify=false
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
         "--workspace", f"file://{workspace_path}",
-        "--authfile", f"file://{auth_file_path}",
         "--parallel-images=10",
         "--parallel-layers=10",
-        f"docker://{args.registry}"
+        f"docker://{args.registry}",
+        "--v2"
     ]
-    
-    if mirror_needs_tls_bypass:
-        mirror_cmd.extend(["--dest-tls-verify=false", "--src-tls-verify=false"])
-        
-    mirror_cmd.append("--v2")
     
     print("\n[INFO] Starting mirror synchronization...")
     run_command(mirror_cmd, "oc-mirror process failed. Verify your Red Hat pull secret and storage capacity.")
