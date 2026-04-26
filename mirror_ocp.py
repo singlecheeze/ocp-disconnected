@@ -37,7 +37,7 @@ def authenticate_sudo():
     print("[SUCCESS] Sudo authenticated.")
 
 def run_command(command, error_message):
-    """Executes a shell command and streams the output character by character."""
+    """Executes a shell command and streams the output line by line."""
     print(f"\n[INFO] Running: {' '.join(command)}")
     try:
         process = subprocess.Popen(
@@ -48,12 +48,8 @@ def run_command(command, error_message):
             bufsize=1
         )
         
-        while True:
-            char = process.stdout.read(1)
-            if not char and process.poll() is not None:
-                break
-            if char:
-                print(char, end='', flush=True)
+        for line in process.stdout:
+            print(line, end='', flush=True)
                 
         process.wait()
         
@@ -272,7 +268,6 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
     install_cmd = [
         "sudo", os.path.join(bin_dir, "mirror-registry"),
         "install",
-        "-v",
         "--quayHostname", hostname,
         "--initUser", admin_user,
         "--initPassword", admin_pass,
