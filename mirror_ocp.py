@@ -4,13 +4,32 @@ import subprocess
 import sys
 import os
 import argparse
-import textwrap
 import urllib.request
 import tarfile
 import urllib.error
 import json
 import base64
 import socket
+import getpass
+
+def authenticate_sudo():
+    """Checks if sudo requires a password, prompts if necessary, and caches the credential."""
+    print("\n[INFO] Checking sudo privileges for system configuration...")
+    # Check if we already have sudo access without a password or if it's already cached
+    check_cmd = subprocess.run(['sudo', '-n', '-v'], capture_output=True)
+    if check_cmd.returncode == 0:
+        print("[INFO] Sudo access is already available.")
+        return
+
+    # If not, prompt the user explicitly
+    sudo_password = getpass.getpass(prompt="[SUDO] Enter password: ")
+    
+    cmd = ['sudo', '-S', '-v']
+    process = subprocess.run(cmd, input=sudo_password + '\n', text=True, capture_output=True)
+    if process.returncode != 0:
+        print("[ERROR] Incorrect sudo password or user lacks sudo privileges.")
+        sys.exit(1)
+    print("[SUCCESS] Sudo authenticated.")
 
 def run_command(command, error_message):
     """Executes a shell command and streams the output."""
@@ -169,6 +188,8 @@ def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
         credentials = f"{admin_user}:{admin_pass}"
         encoded_creds = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
         
+        print(f"[INFO] Encoded Credentials: {encoded_creds}")
+        
         auth_data['auths'][registry_url] = {
             "auth": encoded_creds,
             "email": email
@@ -245,32 +266,26 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
     
     print(f"\n[INFO] Registry credentials injected. Skipping 'podman login' execution to preserve required email keys.")
 
-def generate_imageset_config(version, channel, config_path):
-    """Generates the ImageSetConfiguration YAML file."""
-    config_content = textwrap.dedent(f"""\
-        kind: ImageSetConfiguration
-        apiVersion: mirror.openshift.io/v2alpha1
-        mirror:
-          platform:
-            channels:
-            - name: {channel}
-            graph: true
-          operators:
-          - catalog: registry.redhat.io/redhat/redhat-operator-index:v{version}
-            packages:
-            - name: kubevirt-hyperconverged
-            - name: odf-operator
-            - name: nfd
-          additionalImages:
-          - name: registry.redhat.io/ubi8/ubi:latest
-    """)
-    
+def generate_imageset_config(version, channel, template_file, config_path):
+    """Reads the template file, substitutes variables, and saves the ImageSetConfiguration."""
+    print(f"\n[INFO] Loading ImageSetConfiguration template from {template_file}...")
+    if not os.path.exists(template_file):
+        print(f"[ERROR] Missing template file: {template_file}. Ensure it exists in the working directory.")
+        sys.exit(1)
+        
     try:
+        with open(template_file, 'r') as f:
+            content = f.read()
+        
+        # Replace placeholders natively
+        content = content.replace('{channel}', channel)
+        content = content.replace('{version}', version)
+        
         with open(config_path, 'w') as f:
-            f.write(config_content)
-        print(f"\n[INFO] Generated ImageSetConfiguration at {config_path}")
-    except IOError as e:
-        print(f"[ERROR] Failed to write config file: {e}")
+            f.write(content)
+        print(f"[SUCCESS] Generated runtime config '{config_path}' from template '{template_file}'")
+    except Exception as e:
+        print(f"[ERROR] Failed to process template: {e}")
         sys.exit(1)
 
 def main():
@@ -280,10 +295,14 @@ def main():
     parser.add_argument("--registry", default=default_registry, help=f"Target mirror registry (default: {default_registry})")
     parser.add_argument("--version", default="4.21", help="OpenShift major.minor version (default: 4.21)")
     parser.add_argument("--channel", default="stable-4.21", help="OpenShift release channel (default: stable-4.21)")
+    parser.add_argument("--template-file", default="imageset-config-template.yaml", help="Path to the ImageSetConfiguration template file")
     parser.add_argument("--config-file", default="imageset-config.yaml", help="Path to generate the config file")
     parser.add_argument("--pull-secret", default="./pull-secret.txt", help="Path to the Red Hat pull secret (default: ./pull-secret.txt)")
     
     args = parser.parse_args()
+    
+    # Prompt for sudo password at the very beginning of the script
+    authenticate_sudo()
 
     print("=========================================================")
     print("      OpenShift Disconnected Mirroring Automation        ")
@@ -311,27 +330,24 @@ def main():
     else:
         mirror_needs_tls_bypass = False
 
-    # 4. Build Config
-    generate_imageset_config(args.version, args.channel, args.config_file)
+    # 4. Build Config from External Template
+    generate_imageset_config(args.version, args.channel, args.template_file, args.config_file)
 
-    # Determine current directory for workspace and cache
+    # Determine current directory for workspace
     current_dir = os.path.abspath(os.getcwd())
     workspace_path = os.path.join(current_dir, "workspace")
-    cache_path = os.path.join(current_dir, "cache")
     
-    # Make sure the target directories exist before running
+    # Make sure the target directory exists before running
     os.makedirs(workspace_path, exist_ok=True)
-    os.makedirs(cache_path, exist_ok=True)
     
     # 5. Execute Mirror
-    # The workspace and cache-dir arguments must precede the docker argument
-    # Added 'file://' prefix to the workspace, cache, and auth paths
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
         "--workspace", f"file://{workspace_path}",
-        "--cache-dir", f"file://{cache_path}",
         "--authfile", f"file://{auth_file_path}",
+        "--parallel-images=10",
+        "--parallel-layers=10",
         f"docker://{args.registry}"
     ]
     
