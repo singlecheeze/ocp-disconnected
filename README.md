@@ -13,13 +13,14 @@ This repository contains a Python script to automate the mirroring process for a
 * **Firewall Configuration**: Automatically configures `firewalld` to allow inbound traffic on the designated registry port.
 * **v2 Engine**: Defaults to using the `--v2` flag when executing `oc-mirror` and conforms to the `v2alpha1` API format.
 * **Optimized Syncing**: Implements `--parallel-images=10` and `--parallel-layers=10` for faster download and extraction concurrency.
+* **Real-time Terminal Output**: The script is optimized with `ANSIBLE_FORCE_COLOR=1` and an unbuffered `PYTHONUNBUFFERED=1` character-by-character stdout stream for rich, responsive real-time feedback during underlying playbook or command execution.
 * **Local Workspace**: Explicitly defines the mirror workspace directory using absolute `file://` URIs within the current working path.
 
 ## Prerequisites
 
 1. **Internet Access**: Your bastion host needs internet access to `mirror.openshift.com` if tools need to be downloaded, and standard RHEL repo access if Podman needs to be installed via `dnf`.
 2. **Sudo Privileges**: Required to install Podman, configure the local mirror registry, and manage system firewalls (`firewalld`). The script will prompt you for this password upon execution.
-3. **Red Hat Pull Secret:** You must have your Red Hat pull secret (from console.redhat.com) stored locally. By default, the script looks for it at `./pull-secret.txt`.
+3. **Red Hat Pull Secret:** You must have your Red Hat pull secret stored locally. **You can download it from the bottom of the console found at this link: [https://console.redhat.com/openshift/downloads](https://console.redhat.com/openshift/downloads).** By default, the script looks for it at `./pull-secret.txt`.
 
 ## Usage
 
@@ -42,3 +43,6 @@ This repository contains a Python script to automate the mirroring process for a
 * `--version`: Target OpenShift version (default: `4.21`).
 * `--channel`: Override the release channel (default: `stable-4.21`).
 * `--config-file`: Specify a custom name for the generated runtime configuration file (default: `imageset-config.yaml`).
+
+## Acknowledgments
+A special note of thanks: this blog post was very helpful in developing this tool: [https://myopenshiftblog.com/disconnected-registry-mirroring/](https://myopenshiftblog.com/disconnected-registry-mirroring/)

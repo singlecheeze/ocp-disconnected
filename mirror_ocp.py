@@ -14,6 +14,8 @@ import getpass
 
 # Ensure standard output and error streams are unbuffered for child processes
 os.environ["PYTHONUNBUFFERED"] = "1"
+# Force Ansible color output (useful if Ansible is called under the hood)
+os.environ["ANSIBLE_FORCE_COLOR"] = "1"
 
 def authenticate_sudo():
     """Checks if sudo requires a password, prompts if necessary, and caches the credential."""
@@ -35,17 +37,24 @@ def authenticate_sudo():
     print("[SUCCESS] Sudo authenticated.")
 
 def run_command(command, error_message):
-    """Executes a shell command and streams the output."""
+    """Executes a shell command and streams the output character by character."""
     print(f"\n[INFO] Running: {' '.join(command)}")
     try:
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
+            bufsize=1
         )
-        for line in process.stdout:
-            print(line, end='')
+        
+        while True:
+            char = process.stdout.read(1)
+            if not char and process.poll() is not None:
+                break
+            if char:
+                print(char, end='', flush=True)
+                
         process.wait()
         
         if process.returncode != 0:
@@ -362,7 +371,6 @@ def main():
     os.makedirs(workspace_path, exist_ok=True)
     
     # 5. Execute Mirror
-    # Removed --authfile, --dest-tls-verify=false, and --src-tls-verify=false
     mirror_cmd = [
         "oc-mirror",
         "--config", args.config_file,
