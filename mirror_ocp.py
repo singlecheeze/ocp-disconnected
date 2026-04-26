@@ -165,8 +165,8 @@ def setup_auth_file(pull_secret_path):
     return auth_file
 
 def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
-    """Appends the local mirror registry credentials directly to the auth.json file."""
-    print(f"\n[INFO] Appending local registry credentials to {auth_file}...")
+    """Prepends the local mirror registry credentials to the beginning of the auth.json file."""
+    print(f"\n[INFO] Injecting local registry credentials to {auth_file}...")
     
     if not os.path.exists(auth_file):
         print(f"[ERROR] Auth file {auth_file} does not exist. Cannot append credentials.")
@@ -193,18 +193,23 @@ def append_registry_auth(auth_file, registry_url, admin_user, admin_pass):
         
         print(f"[INFO] Encoded Credentials: {encoded_creds}")
         
-        auth_data['auths'][registry_url] = {
-            "auth": encoded_creds,
-            "email": email
+        # Prepend the new registry to the beginning of the auths dictionary
+        new_auths = {
+            registry_url: {
+                "auth": encoded_creds,
+                "email": email
+            }
         }
+        new_auths.update(auth_data['auths'])
+        auth_data['auths'] = new_auths
         
         with open(auth_file, 'w') as f:
             json.dump(auth_data, f, indent=4)
             
-        print(f"[SUCCESS] Appended base64 encoded credentials for {registry_url} to {auth_file}.")
+        print(f"[SUCCESS] Prepended base64 encoded credentials for {registry_url} to {auth_file}.")
         
     except Exception as e:
-        print(f"[ERROR] Failed to append credentials to auth file: {e}")
+        print(f"[ERROR] Failed to prepend credentials to auth file: {e}")
         sys.exit(1)
 
 def configure_firewall(port):
@@ -250,18 +255,36 @@ def setup_local_mirror_registry(registry_fqdn, auth_file):
     
     admin_user = "admin"
     admin_pass = "Welcome1"
+    
+    # Set quayRoot to current working directory + "/mirror"
+    current_dir = os.path.abspath(os.getcwd())
+    quay_root = os.path.join(current_dir, "mirror")
 
     install_cmd = [
         "sudo", os.path.join(bin_dir, "mirror-registry"),
         "install",
         "--quayHostname", hostname,
         "--initUser", admin_user,
-        "--initPassword", admin_pass
+        "--initPassword", admin_pass,
+        "--quayRoot", quay_root
     ]
     
     print("[INFO] Running mirror-registry installer. (Note: this requires sudo privileges)")
     run_command(install_cmd, "Failed to install the local mirror registry.")
     print("[SUCCESS] Local Mirror Registry (Quay) is successfully configured!")
+    
+    # Copy the Quay Root CA to the system's trust anchors and update CA trust
+    cert_src = os.path.join(quay_root, "quay-rootCA", "rootCA.pem")
+    cert_dest = "/etc/pki/ca-trust/source/anchors/"
+    
+    print(f"\n[INFO] Copying generated root CA to system trust anchors...")
+    cp_cmd = ["sudo", "cp", cert_src, cert_dest]
+    run_command(cp_cmd, f"Failed to copy {cert_src} to {cert_dest}")
+    
+    print(f"[INFO] Updating system CA trust...")
+    update_trust_cmd = ["sudo", "update-ca-trust", "extract"]
+    run_command(update_trust_cmd, "Failed to update CA trust.")
+    print("[SUCCESS] System CA trust updated successfully.")
     
     # Explicitly append auth using base64 injection into auth.json
     append_registry_auth(auth_file, registry_url, admin_user, admin_pass)

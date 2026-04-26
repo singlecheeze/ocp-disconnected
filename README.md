@@ -9,7 +9,8 @@ This repository contains a Python script to automate the mirroring process for a
 * **Explicit Auth Targeting**: Uses the `--authfile` argument to ensure `oc-mirror` accurately utilizes the generated podman credentials file instead of relying on environment variables.
 * **Auto-Install Podman**: Automatically checks for and installs Podman via `dnf` if it is not present on the system.
 * **Auto-Downloading of Tools**: Fetches `oc` and `oc-mirror` automatically if they are missing from your `$PATH`.
-* **Automatic Registry Configuration**: If `oc-mirror` is not found, the script downloads and installs Red Hat's official `mirror-registry` (a lightweight Quay instance).
+* **Automatic Registry Configuration**: If `oc-mirror` is not found, the script downloads and installs Red Hat's official `mirror-registry` (a lightweight Quay instance). The registry data is placed directly in the `mirror` directory alongside the script for easy management.
+* **Trust Store Configuration**: After registry installation, the tool automatically imports the new Quay root CA certificate (`rootCA.pem`) into the system's trust anchors (`/etc/pki/ca-trust/source/anchors/`) and updates the system's CA trust list to securely route without ignoring TLS.
 * **Firewall Configuration**: Automatically configures `firewalld` to allow inbound traffic on the designated registry port.
 * **v2 Engine**: Defaults to using the `--v2` flag when executing `oc-mirror` and conforms to the `v2alpha1` API format.
 * **Optimized Syncing**: Implements `--parallel-images=10` and `--parallel-layers=10` for faster download and extraction concurrency.
