@@ -12,6 +12,9 @@ import base64
 import socket
 import getpass
 
+# Ensure standard output and error streams are unbuffered for child processes
+os.environ["PYTHONUNBUFFERED"] = "1"
+
 def authenticate_sudo():
     """Checks if sudo requires a password, prompts if necessary, and caches the credential."""
     print("\n[INFO] Checking sudo privileges for system configuration...")
